@@ -2,12 +2,19 @@
 #define COMPORTAMIENTOJUGADOR_H
 
 #include "comportamientos/comportamiento.hpp"
+
 using namespace std;
 
 struct state{
     int fil;
     int col;
     Orientacion brujula;
+};
+
+struct Movement{
+    int fil;
+    int col;
+    Movement(int a = 0, int b = 0) : fil(a), col(b){}
 };
 
 class ComportamientoJugador : public Comportamiento{
@@ -18,8 +25,8 @@ class ComportamientoJugador : public Comportamiento{
       current_state.col = 99;
       current_state.brujula = norte;
       last_action = actIDLE;
-      girar_derecha = false;
       bien_situado = false;
+      cont_actWALK = 0;
     }
 
     ComportamientoJugador(const ComportamientoJugador & comport) : Comportamiento(comport){}
@@ -27,12 +34,19 @@ class ComportamientoJugador : public Comportamiento{
 
     Action think(Sensores sensores);
     int interact(Action accion, int valor);
-    void PonerTerrenoEnMatriz(const vector<unsigned char> & terreno, const state & st, vector<vector<unsigned char>> & m);
+    void printSensors(const Sensores & sensores);
+    void PonerTerrenoEnMatriz(const vector<unsigned char> & terreno, const state & st, vector<vector<unsigned char>> & map);
+    bool specialItems(const vector<unsigned char> & terreno);
+    bool alreadyExplored(const vector<vector<unsigned char>> & map, const state & st, const Action & a);
+    Movement moveForward(const Orientacion & brujula);
+    bool canMoveForward(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
+    bool canMoveDiagonal(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
+    Action rotate();
 
   private:
     state current_state;
     Action last_action;
-    bool girar_derecha;
     bool bien_situado;
+    int cont_actWALK;
 };
 #endif
