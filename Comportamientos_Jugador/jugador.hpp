@@ -2,6 +2,8 @@
 #define COMPORTAMIENTOJUGADOR_H
 
 #include "comportamientos/comportamiento.hpp"
+#include <set>
+#include <queue>
 
 using namespace std;
 
@@ -27,6 +29,7 @@ class ComportamientoJugador : public Comportamiento{
       last_action = actIDLE;
       bien_situado = false;
       cont_actWALK = 0;
+      aux_map.resize(200, vector<unsigned char>(200, '?'));
     }
 
     ComportamientoJugador(const ComportamientoJugador & comport) : Comportamiento(comport){}
@@ -36,17 +39,32 @@ class ComportamientoJugador : public Comportamiento{
     int interact(Action accion, int valor);
     void printSensors(const Sensores & sensores);
     void PonerTerrenoEnMatriz(const vector<unsigned char> & terreno, const state & st, vector<vector<unsigned char>> & map);
-    bool specialItems(const vector<unsigned char> & terreno);
+    bool detectBikini(const vector<unsigned char> & terreno);
+    bool detectZapatillas(const vector<unsigned char> & terreno);
+    bool detectReload(const vector<unsigned char> & terreno);
+    bool detectPositioning(const vector<unsigned char> & terreno);
     bool alreadyExplored(const vector<vector<unsigned char>> & map, const state & st, const Action & a);
     Movement moveForward(const Orientacion & brujula);
     bool canMoveForward(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
     bool canMoveDiagonal(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
+    void translateMap(const Sensores & sensores, const state & st, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map);
+    Movement searchUnexplored();
+    float measure(const state & st1, const state & st2);
+    queue<Action> goToLocation(Movement location);
+    bool withinLimits(int i, int j);
     Action rotate();
 
   private:
     state current_state;
     Action last_action;
     bool bien_situado;
+    bool bikini;
+    bool zapatillas;
+    vector<vector<unsigned char>> aux_map;
+    set<state> reloadsLocation;
+    set<state> bikinisLocation;
+    set<state> zapatillasLocation;
+    queue<Action> protocol;
     int cont_actWALK;
 };
 #endif

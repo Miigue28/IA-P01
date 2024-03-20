@@ -32,9 +32,9 @@ Action ComportamientoJugador::think(Sensores sensores)
         break;
     }
 
-    // if (sensores.posF != -1 && !bien_situado)
     if ((sensores.terreno[0] == 'G' || sensores.nivel == 0) && !bien_situado)
     {
+        translateMap(sensores, current_state, aux_map, mapaResultado);
         current_state.fil = sensores.posF;
         current_state.col = sensores.posC;
         current_state.brujula = sensores.sentido;
@@ -43,16 +43,27 @@ Action ComportamientoJugador::think(Sensores sensores)
 
     if (sensores.reset)
     {
+        current_state.fil = 99;
+        current_state.col = 99;
+        current_state.brujula = norte;
         bien_situado = false;
+        aux_map.clear();
     }
 
     if (bien_situado)
-    {
         PonerTerrenoEnMatriz(sensores.terreno, current_state, mapaResultado);
-    }
+    else
+        PonerTerrenoEnMatriz(sensores.terreno, current_state, aux_map);
 
     // Fase de decisión de la nueva acción
-    if (canMoveForward(sensores.terreno, sensores.agentes) && cont_actWALK < 10)
+    /*
+    if (!bien_situado && detectPositioning(sensores.terreno))
+    {
+
+    }
+    else
+    */
+    if (canMoveForward(sensores.terreno, sensores.agentes) && cont_actWALK < 15)
     {
         accion = actWALK;
         cont_actWALK++;
@@ -66,7 +77,7 @@ Action ComportamientoJugador::think(Sensores sensores)
     last_action = accion;
 	return accion;
 }
-// TODO hay algo que falla al poner en la matriz los elementos del sensor
+
 void ComportamientoJugador::PonerTerrenoEnMatriz(const vector<unsigned char> & terreno, const state & st, vector<vector<unsigned char>> & map)
 {
     int k = 0;
@@ -144,32 +155,72 @@ void ComportamientoJugador::PonerTerrenoEnMatriz(const vector<unsigned char> & t
     }
 }
 
+void ComportamientoJugador::translateMap(const Sensores & sensores, const state & st, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map)
+{
+    int row = abs(st.fil - sensores.posF);
+    int column = abs(st.col - sensores.posC);
+    
+    for (int i = 0; i < map.size(); i++)
+    {
+        for (int j = 0; j < map[i].size(); j++)
+        {
+            if (map[i][j] == '?')
+                map[i][j] = aux[row + i][column + j];
+        }
+    }        
+}
 
-bool ComportamientoJugador::specialItems(const vector<unsigned char> & terreno)
+
+bool ComportamientoJugador::detectBikini(const vector<unsigned char> & terreno)
 {
     for (auto t : terreno)
     {
-        if (t == 'K' || t == 'D')
+        if (t == 'B')
             return true;
     }
     return false;
 }
 
-bool ComportamientoJugador::alreadyExplored(const vector<vector<unsigned char>> & map, const state & st, const Action & action)
+bool ComportamientoJugador::detectPositioning(const vector<unsigned char> & terreno)
 {
-    Movement walk;
-    switch (action)
+    for (auto t : terreno)
     {
-        case actWALK:
-            walk = moveForward(st.brujula);
-            return (map[st.fil + walk.fil][st.col + walk.col] == '?') ? false : true;
-        break;
-        case actRUN:
-            walk = moveForward(st.brujula);
-            return (map[st.fil + 2*walk.fil][st.col + 2*walk.col] == '?') ? false : true;
-        break;
+        if (t == 'G')
+            return true;
     }
     return false;
+}
+
+queue<Action> ComportamientoJugador::goToLocation(Movement location)
+{
+    return {};
+}
+
+Movement ComportamientoJugador::searchUnexplored()
+{
+    int r = current_state.fil;
+    int c = current_state.col;
+    int rk = 0, ck = 0;
+    for (int k = 0; ; k++)
+    {
+        // CONSIDERAR LOS CASOS CERCANOS A LOS BORDES
+        for (int i = r - rk; i < (r + k) % mapaResultado.size(); i++)
+        {
+            for (int j = c - ck; j < (c + k) % mapaResultado.size(); j++)
+            {
+                if (mapaResultado[i][j] == '?')
+                    return {i, j};
+            }
+        }
+    }
+    return {};
+}
+
+bool ComportamientoJugador::withinLimits(int i, int j)
+{
+    bool row = (0 <= i && i <= mapaResultado.size());
+    bool column = (0 <= j && j <= mapaResultado.size());
+    return (row && column);
 }
 
 Action ComportamientoJugador::rotate()
