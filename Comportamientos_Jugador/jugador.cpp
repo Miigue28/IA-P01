@@ -32,13 +32,35 @@ Action ComportamientoJugador::think(Sensores sensores)
         break;
     }
 
-    if ((sensores.terreno[0] == 'G' || sensores.nivel == 0) && !bien_situado)
+    if (sensores.nivel == 0)
     {
-        translateMap(sensores, current_state, aux_map, mapaResultado);
         current_state.fil = sensores.posF;
         current_state.col = sensores.posC;
         current_state.brujula = sensores.sentido;
         bien_situado = true;
+    }
+
+    // Terminar
+    switch (sensores.terreno[0])
+    {
+        case 'G':
+            if (!bien_situado)
+            {
+                translateMap(sensores, current_state, aux_map, mapaResultado);
+                current_state.fil = sensores.posF;
+                current_state.col = sensores.posC;
+                current_state.brujula = sensores.sentido;
+                bien_situado = true;
+            }
+        break;
+        case 'X':
+        break;
+        case 'K':
+            bikini = true;
+        break;
+        case 'D':
+            zapatillas = true;
+        break;
     }
 
     if (sensores.reset)
@@ -56,14 +78,23 @@ Action ComportamientoJugador::think(Sensores sensores)
         PonerTerrenoEnMatriz(sensores.terreno, current_state, aux_map);
 
     // Fase de decisión de la nueva acción
-    /*
     if (!bien_situado && detectPositioning(sensores.terreno))
     {
-
+        accion = searchSquare(sensores.terreno, sensores.agentes, 'G');
     }
-    else
-    */
-    if (canMoveForward(sensores.terreno, sensores.agentes) && cont_actWALK < 15)
+    else if (detectReload(sensores.terreno))
+    {
+        accion = searchSquare(sensores.terreno, sensores.agentes, 'X');
+    }
+    else if (!bikini && detectBikini(sensores.terreno))
+    {
+        accion = searchSquare(sensores.terreno, sensores.agentes, 'K');
+    }
+    else if (!zapatillas && detectZapatillas(sensores.terreno))
+    {
+        accion = searchSquare(sensores.terreno, sensores.agentes, 'D'); 
+    }
+    else if (canMoveForward(sensores.terreno, sensores.agentes) && cont_actWALK < 15)
     {
         accion = actWALK;
         cont_actWALK++;
@@ -175,7 +206,17 @@ bool ComportamientoJugador::detectBikini(const vector<unsigned char> & terreno)
 {
     for (auto t : terreno)
     {
-        if (t == 'B')
+        if (t == 'K')
+            return true;
+    }
+    return false;
+}
+
+bool ComportamientoJugador::detectZapatillas(const vector<unsigned char> & terreno)
+{
+    for (auto t : terreno)
+    {
+        if (t == 'D')
             return true;
     }
     return false;
@@ -189,6 +230,61 @@ bool ComportamientoJugador::detectPositioning(const vector<unsigned char> & terr
             return true;
     }
     return false;
+}
+
+bool ComportamientoJugador::detectReload(const vector<unsigned char> & terreno)
+{
+    for (auto t : terreno)
+    {
+        if (t == 'X')
+            return true;
+    }
+    return false;
+}
+
+Action ComportamientoJugador::searchSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, unsigned char square)
+{
+    // HACER MÁS EFICIENTE ESTÁ BUSQUEDA
+    int index = -1;
+    for (int i = 0; i < terreno.size(); i++)
+    {
+        if (terreno[i] == square)
+        {
+            index = i;
+            break;
+        }
+    }
+
+    if (index == -1)
+    {
+        return actIDLE;
+    }
+
+    if (1 <= index && index <= 3)
+    {
+        if (index == 2)
+            return actWALK;
+        else if (index == 3)
+            return actTURN_SR;
+        else
+            return actTURN_L;
+    }
+    else if (4 <= index && index <= 8)
+    {
+        if (index == 6)
+            return actRUN;
+        else if (index < 6)
+            return actWALK;
+        else
+            return actTURN_SR;
+    }
+    else
+    {
+        if (index <= 12)
+            return (canRunForward(terreno, agentes) ? actRUN : actWALK);
+        else
+            return actTURN_SR;
+    }
 }
 
 queue<Action> ComportamientoJugador::goToLocation(Movement location)
@@ -268,6 +364,11 @@ Movement ComportamientoJugador::moveForward(const Orientacion & brujula)
 bool ComportamientoJugador::canMoveForward(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
 {
     return (terreno[2] != 'P' && terreno[2] != 'M' && agentes[2] == '_');
+}
+
+bool ComportamientoJugador::canRunForward(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
+{
+    return (terreno[6] != 'P' && terreno[6] != 'M' && agentes[6] == '_');
 }
 
 bool ComportamientoJugador::canMoveDiagonal(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)

@@ -46,11 +46,13 @@ class ComportamientoJugador : public Comportamiento{
     bool alreadyExplored(const vector<vector<unsigned char>> & map, const state & st, const Action & a);
     Movement moveForward(const Orientacion & brujula);
     bool canMoveForward(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
+    bool canRunForward(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
     bool canMoveDiagonal(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
     void translateMap(const Sensores & sensores, const state & st, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map);
     Movement searchUnexplored();
     float measure(const state & st1, const state & st2);
     queue<Action> goToLocation(Movement location);
+    Action searchSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, unsigned char square);
     bool withinLimits(int i, int j);
     Action rotate();
 
