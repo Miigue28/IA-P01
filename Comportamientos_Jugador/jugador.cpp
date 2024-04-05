@@ -10,8 +10,16 @@ Action ComportamientoJugador::think(Sensores sensores)
 	printSensors(sensores);
 
     Movement move;
-    const int DISCOVERED_THRESH = int(mapaResultado.size()*mapaResultado.size()*0.75);
-    bool faulty = (sensores.nivel == 3);
+
+    if (sensores.colision)
+    {
+        last_action = actIDLE;
+    }
+
+    if (sensores.reset)
+    {
+        resetState();
+    }
 
     // Fase de observación
     switch (last_action)
@@ -34,24 +42,29 @@ Action ComportamientoJugador::think(Sensores sensores)
         break;
     }
 
-    if (sensores.nivel == 0)
+    switch (sensores.nivel)
     {
-        current_state.fil = sensores.posF;
-        current_state.col = sensores.posC;
-        current_state.brujula = sensores.sentido;
-        bien_situado = true;
-    }
-
-    if (sensores.reset)
-    {
-        resetState();
+        case 0:
+            current_state.fil = sensores.posF;
+            current_state.col = sensores.posC;
+            current_state.brujula = sensores.sentido;
+            bien_situado = true;
+        break;
+        case 3:
+            faulty = true;
+        break;
     }
 
     if (bien_situado)
+    {
         printMap(sensores.terreno, current_state, mapaResultado, priority, faulty);
+        printPriorities(sensores.terreno, current_state, priority, faulty);
+    }
     else
+    {
         printMap(sensores.terreno, current_state, aux_map, aux_prio, faulty);
-
+        printPriorities(sensores.terreno, current_state, aux_prio, faulty);
+    }
 
     switch (sensores.terreno[0])
     {
@@ -59,7 +72,6 @@ Action ComportamientoJugador::think(Sensores sensores)
             if (!bien_situado)
             {
                 translateMap(sensores, current_state, aux_map, mapaResultado);
-                // TODO: Verificar si el número de giros es el correcto
                 rotateMap(sensores, current_state, mapaResultado);
                 current_state.fil = sensores.posF;
                 current_state.col = sensores.posC;
@@ -77,18 +89,12 @@ Action ComportamientoJugador::think(Sensores sensores)
             }
         break;
         case 'K':
-            if (bien_situado && !bikini) modifyPriority(mapaResultado, false); else modifyPriority(aux_map, true);
+            if (bien_situado && !bikini) modifyPriority(mapaResultado, priority); else modifyPriority(aux_map, aux_prio);
             bikini = true;
         break;
         case 'D':
-            if (bien_situado && !zapatillas) modifyPriority(mapaResultado, false); else modifyPriority(aux_map, true);
+            if (bien_situado && !zapatillas) modifyPriority(mapaResultado, priority); else modifyPriority(aux_map, aux_prio);
             zapatillas = true;
-        break;
-        default:
-            if (bien_situado)
-                priority[current_state.fil][current_state.col]++;
-            else
-                aux_prio[current_state.fil][current_state.col]++;
         break;
     }
 
@@ -109,7 +115,7 @@ Action ComportamientoJugador::think(Sensores sensores)
     }
     else if (wall_protocol)
     {
-        action = wallProtocol(sensores.terreno);
+        action = wallProtocol(sensores.terreno, sensores.agentes);
     }
     else if (!bien_situado && detectPositioning(sensores.terreno))
     {
@@ -131,26 +137,20 @@ Action ComportamientoJugador::think(Sensores sensores)
     {
         action = selectMovement(sensores.terreno, sensores.agentes, bien_situado ? priority : aux_prio);
     }
-    //else if (need_reload && !reloads.empty())
-    //{
-    //    // Calculamos la recarga más cercana
-    //    int distance = -1, min = 500;
-    //    for (auto r : reloads)
-    //    {
-    //        distance = measureDistance((Square)current_state, r);
-    //        if (distance < min)
-    //        {
-    //            objective = r;
-    //            min = distance; 
-    //        }
-    //    }
-    //    action = goToLocation(objective, sensores.terreno, sensores.agentes);
-    //}
-    //else if (discovered > DISCOVERED_THRESH)
-    //{
-    //    objective = searchUnexplored(mapaResultado);
-    //    action = goToLocation(objective, sensores.terreno, sensores.agentes);
-    //}
+    // else if (need_reload)
+    // {
+    //     // Calculamos la recarga más cercana
+    //     objective = searchUnexplored(bien_situado ? mapaResultado : aux_map, 'X');
+    //     goto_objective = true;
+    //     action = goToObjective(sensores.terreno, sensores.agentes, bien_situado ? priority : aux_prio);
+    // }
+    // else
+    // {
+    //     objective = searchUnexplored(mapaResultado);
+    //     goto_objective = true;
+    //     setPrioritySearch(bien_situado ? mapaResultado : aux_map, bien_situado ? priority : aux_prio, objective);
+    //     action = goToObjective(sensores.terreno, sensores.agentes, bien_situado ? priority : aux_prio);
+    // }
     else if (accesibleSquare(sensores.terreno, sensores.agentes, 2) && cont_actWALK < 15)
     {
         action = actWALK;
@@ -158,13 +158,36 @@ Action ComportamientoJugador::think(Sensores sensores)
     }
     else
     {
-        action = rotate();
+        action = randomlyRotate();
         cont_actWALK = 0;
     }
     
     // Devuelve el valor de la acción
     last_action = action;
 	return action;
+}
+
+Action ComportamientoJugador::randomlyMove(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
+{
+    int walk = 2, run = 6;
+    bool canwalk = accesibleSquare(terreno, agentes, walk);
+    vector<Action> selection;
+    default_random_engine generator;
+    uniform_real_distribution<float> distribution(0.0,1.0);
+
+    for (int i = 0; i < 10; i++)
+    {
+        float prob = distribution(generator);
+        if (prob < FORWARD_PROB)
+            selection.push_back(actWALK);
+        else if (prob < TURNL_PROB + TURNSR_PROB)
+            selection.push_back(actTURN_SR);
+        else if (prob < TURNL_PROB + TURNSR_PROB + FORWARD_PROB)
+            selection.push_back(actTURN_L);
+        else
+            selection.push_back(actTURN_SR);
+    }
+    return selection[rand() % selection.size()];
 }
 
 bool ComportamientoJugador::detectBikini(const vector<unsigned char> & terreno)
@@ -217,9 +240,17 @@ bool ComportamientoJugador::detectWalls(const vector<unsigned char> & terreno)
     return false;
 }
 
+bool ComportamientoJugador::alreadyExplored(const vector<vector<unsigned char>> & map, const State & st, const Vision & vision)
+{
+    Movement move = setMovement(st.brujula, vision);
+    int row = (st.fil + 3*move.fil > 0) ? (st.fil + 3*move.fil) % map.size() : 0;
+    int column = (st.col + 3*move.col > 0) ? (st.col + 3*move.col) % map.size() : 0;
+    return map[row][column] != '?';
+}
+
 Action ComportamientoJugador::searchSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, unsigned char square)
 {
-    // HACER MÁS EFICIENTE ESTÁ BUSQUEDA
+    // TODO: HACER MÁS EFICIENTE ESTÁ BUSQUEDA
     int index = -1;
     for (int i = 0; i < terreno.size(); i++)
     {
@@ -262,252 +293,55 @@ Action ComportamientoJugador::searchSquare(const vector<unsigned char> & terreno
     }
 }
 
-/*
-Action ComportamientoJugador::goToLocation(const Square & location, const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
+Action ComportamientoJugador::goToObjective(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, const vector<vector<unsigned int>> & prio)
 {
     int row = current_state.fil;
     int column = current_state.col;
-    int relative_position = -1;
-    if (row < location.fil)
+    int walk = 2, run = 6;
+    unsigned int min = prio[row][column], min_leftdiag = 500, min_rightdiag = 500;
+    Movement move = setMovement(current_state.brujula, straight);
+    Action action = actTURN_L;
+    if (accesibleSquare(terreno, agentes, walk))
     {
-        if (column < location.col)
+        min = prio[current_state.fil + move.fil][current_state.col + move.col];
+        action = actWALK;
+        if (!faulty && accesibleSquare(terreno, agentes, run))
         {
-            relative_position = 0;
-        }
-        else
-        {
-            relative_position = 1;
+            unsigned int run_prio = prio[current_state.fil + 2*move.fil][current_state.col + 2*move.col];
+            if (run_prio < min)
+            {
+                min = run_prio;
+                action = actRUN;
+            }
         }
     }
-    else 
+    if (canMoveDiagonally(terreno, agentes, bien_situado ? priority : aux_prio, rightdiagonal, min_rightdiag) && min_rightdiag < min)
     {
-        if (column < location.col)
-        {
-            relative_position = 2;
-        }
-        else
-        {
-            relative_position = 3;
-        }
+        min = min_rightdiag;
+        action = actTURN_SR;
     }
-
-    switch (current_state.brujula)
+    if (canMoveDiagonally(terreno, agentes, bien_situado ? priority : aux_prio, leftdiagonal, min_leftdiag) && min_leftdiag < min)
     {
-        case norte:
-            switch (relative_position)
-            {
-                case 0:
-                    return actTURN_SR;
-                break;
-                case 1:
-                    return actTURN_L;
-                break;
-                case 2:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_L;
-                break;
-                case 3:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-            }
-        break;
-        case noreste:
-            switch (relative_position)
-            {
-                case 0:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 1:
-                    return actTURN_L;
-                break;
-                case 2:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_L;
-                break;
-                case 3:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-            }
-        break;
-        case este:
-            switch (relative_position)
-            {
-                case 0:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 1:
-                    return actTURN_SR;
-                break;
-                case 2:
-                    return actTURN_L;
-                break;
-                case 3:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_L;
-                break;
-            }
-        break;
-        case sureste:
-            switch (relative_position)
-            {
-                case 0:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 1:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 2:
-                    return actTURN_L;
-                break;
-                case 3:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_L;
-                break;
-            }
-        break;
-        case sur:
-            switch (relative_position)
-            {
-                case 0:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_L;
-                break;
-                case 1:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 2:
-                    return actTURN_L;
-                break;
-                case 3:
-                    return actTURN_SR;
-                break;
-            }
-        break;
-        case suroeste:
-            switch (relative_position)
-            {
-                case 0:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_L;
-                break;
-                case 1:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 2:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 3:
-                    return actTURN_L;
-                break;
-            }
-        break;
-        case oeste:
-            switch (relative_position)
-            {
-                case 0:
-                    return actTURN_L;
-                break;
-                case 1:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_L;
-                break;
-                case 2:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 3:
-                    return actTURN_SR;
-                break;
-            }
-        break;
-        case noroeste:
-            switch (relative_position)
-            {
-                case 0:
-                    return actTURN_L;
-                break;
-                case 1:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_L;
-                break;
-                case 2:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-                case 3:
-                    if (canMoveForward(terreno, agentes))
-                        return actWALK;
-                    else
-                        return actTURN_SR;
-                break;
-            }
-        break;
+        min = min_leftdiag;
+        action = actTURN_L;
     }
-    return {};
+    return action;
 }
-*/
 
-Action ComportamientoJugador::wallProtocol(const vector<unsigned char> & terreno)
+Action ComportamientoJugador::wallProtocol(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
 {
     if (terreno[1] == 'M' && terreno[2] == 'M' && terreno[3] == 'M')
-        return actTURN_L;
+        return randomlyRotate();
     else if (terreno[1] == 'M' && terreno[2] == 'M')
         return actTURN_SR;
     else if (terreno[2] == 'M' && terreno[3] == 'M')
         return actTURN_L;
     else if (terreno[1] == 'M' && terreno[3] == 'M')
-        return actWALK;
+        return accesibleSquare(terreno, agentes, 2) ? actWALK : actTURN_L;
     else if (terreno[1] == 'M' || terreno[3] == 'M')
     {
         had_walls = (terreno[1] == 'M' ? leftdiagonal : rightdiagonal);
-        return actWALK;
+        return accesibleSquare(terreno, agentes, 2) ? actWALK : actTURN_L;
     }
     else
     {
@@ -515,17 +349,25 @@ Action ComportamientoJugador::wallProtocol(const vector<unsigned char> & terreno
         switch (had_walls)
         {
             case rightdiagonal:
-                protocol.emplace_back(actWALK);
-                return actTURN_SR;
+                if (accesibleSquare(terreno, agentes, 3))
+                {
+                    protocol.emplace_back(actWALK);
+                    return actTURN_SR;
+                }
+                return actTURN_L;
             case leftdiagonal:
-                protocol.emplace_back(actTURN_L);
-                protocol.emplace_back(actWALK);
-                return actWALK;
+                if (accesibleSquare(terreno, agentes, 2))
+                {
+                    protocol.emplace_back(actTURN_L);
+                    protocol.emplace_back(actWALK);
+                    return actWALK;
+                }
+                return actTURN_L;
         }
     }
 }
 
-Square ComportamientoJugador::searchUnexplored(const vector<vector<unsigned char>> & map)
+Square ComportamientoJugador::searchUnexplored(const vector<vector<unsigned char>> & map, char square)
 {
     int row = current_state.fil;
     int column = current_state.col;
@@ -550,7 +392,7 @@ Square ComportamientoJugador::searchUnexplored(const vector<vector<unsigned char
 
         for (int i = row_lowerbound; i <= row_upperbound; i++)
         {
-            if (map[i][column_lowerbound] == '?')
+            if (map[i][column_lowerbound] == square)
             {
                 tmp = {i, column_lowerbound};
                 distance = measureDistance(tmp, base);
@@ -560,7 +402,7 @@ Square ComportamientoJugador::searchUnexplored(const vector<vector<unsigned char
                     min = distance;
                 }
             }
-            if (map[i][column_upperbound] == '?')
+            if (map[i][column_upperbound] == square)
             {
                 tmp = {i, column_upperbound};
                 distance = measureDistance(tmp, base);
@@ -573,7 +415,7 @@ Square ComportamientoJugador::searchUnexplored(const vector<vector<unsigned char
         }
         for (int i = column_lowerbound; i <= column_upperbound; i++)
         {
-            if (map[row_lowerbound][i] == '?')
+            if (map[row_lowerbound][i] == square)
             {
                 tmp = {row_lowerbound, i};
                 distance = measureDistance(tmp, base);
@@ -583,7 +425,7 @@ Square ComportamientoJugador::searchUnexplored(const vector<vector<unsigned char
                     min = distance;
                 }
             }
-            if (map[row_upperbound][i] == '?')
+            if (map[row_upperbound][i] == square)
             {
                 tmp = {row_upperbound, i};
                 distance = measureDistance(tmp, base);
@@ -608,7 +450,7 @@ int ComportamientoJugador::measureDistance(const Square & st1, const Square & st
     return abs(st1.fil - st2.fil) + abs(st1.col - st2.col);
 }
 
-Action ComportamientoJugador::rotate()
+Action ComportamientoJugador::randomlyRotate()
 {
     return (rand() % 2 == 0) ? actTURN_SR : actTURN_L;
 }
@@ -617,11 +459,11 @@ int ComportamientoJugador::setPriority(const unsigned char & sq)
 {
     switch (sq)
     {
-        case 'A': return 20; break;
-        case 'B': return 30; break;
-        case 'P': return 100; break;
-        case 'M': return 100; break;
-        case 'T': return 10; break;
+        case 'A': return bikini ? 25 : 50; break;
+        case 'B': return zapatillas ? 35 : 70; break;
+        case 'P': return 500; break;
+        case 'M': return 500; break;
+        case 'T': return 20; break;
         case 'S': return 5; break;
         case 'G': return 5; break;
         case 'K': return 5; break;
@@ -630,28 +472,26 @@ int ComportamientoJugador::setPriority(const unsigned char & sq)
     }
 }
 
-void ComportamientoJugador::modifyPriority(const vector<vector<unsigned char>> & map, bool aux)
+void ComportamientoJugador::modifyPriority(const vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio)
 {
     for (int i = 0; i < map.size(); i++)
     {
         for (int j = 0; j < map[i].size(); j++)
         {
             if (bikini && map[i][j] == 'A')
-            {
-                if (!aux)
-                    priority[i][j] -= 10;
-                else
-                    aux_prio[i][j] -= 10;
-            }
+                prio[i][j] -= 25;
+
             if (zapatillas && map[i][j] == 'B')
-            {
-                if (!aux)
-                    priority[i][j] -= 15;
-                else
-                    aux_prio[i][j] -= 15;
-            }
+                prio[i][j] -= 35;
         }
     }
+}
+
+void ComportamientoJugador::setPrioritySearch(const vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio, const Square & objective)
+{
+    for (int i = 0; i < map.size(); i++)
+        for (int j = 0; j < map[i].size(); i++)
+            prio[i][j] = measureDistance(objective, {i, j});
 }
 
 Action ComportamientoJugador::selectMovement(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, vector<vector<unsigned int>> & prio)
@@ -664,11 +504,10 @@ Action ComportamientoJugador::selectMovement(const vector<unsigned char> & terre
     {
         min = prio[current_state.fil + move.fil][current_state.col + move.col];
         action = actWALK;
-        // Si la siguiente también es accesible
-        if (accesibleSquare(terreno, agentes, run))
+        if (!faulty && accesibleSquare(terreno, agentes, run))
         {
             unsigned int run_prio = prio[current_state.fil + 2*move.fil][current_state.col + 2*move.col];
-            if (run_prio <= min)
+            if (run_prio < min)
             {
                 min = run_prio;
                 action = actRUN;
@@ -702,7 +541,7 @@ bool ComportamientoJugador::canMoveDiagonally(const vector<unsigned char> & terr
     {
         min = prio[current_state.fil + move.fil][current_state.col + move.col];
         // Si la siguiente también es accesible
-        if (accesibleSquare(terreno, agentes, run))
+        if (!faulty && accesibleSquare(terreno, agentes, run))
         {
             unsigned int run_prio = prio[current_state.fil + 2*move.fil][current_state.col + 2*move.col];
             min = run_prio < min ? run_prio : min;
@@ -985,6 +824,136 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
     }
 }
 
+void ComportamientoJugador::printPriorities(const vector<unsigned char> & terreno, const State & st, vector<vector<unsigned int>> & prio, bool faulty)
+{
+    int k = 1;
+    prio[st.fil][st.col] += 5;
+    switch (st.brujula)
+    {
+        case norte:
+            for (int i = 1; i < 4; i++)
+            {
+                for (int j = 1; j < 2*i+2; j++)
+                {
+                    if (faulty && (k == 6 || k == 11 || k == 12 || k == 13))
+                        continue;
+
+                    prio[st.fil - i][st.col - i - 1 + j]++;
+                    k++;
+                }
+            }  
+        break;
+        case noreste:
+            for (int i = 1; i < 4; i++)
+            {
+                for (int j = 1; j < 2*i + 2; j++)
+                {
+                    if (faulty && (k == 6 || k == 11 || k == 12 || k == 13))
+                        continue;
+
+                    if (j < i + 1)
+                        prio[st.fil - i][st.col + j - 1]++;
+                    else
+                        prio[st.fil - i - i - 1 + j][st.col + i]++;
+
+                    k++;
+                }
+            }     
+        break;
+        case este:
+            for (int i = 1; i < 4; i++)
+            {
+                for (int j = 1; j < 2*i+2; j++)
+                {
+                    if (faulty && (k == 6 || k == 11 || k == 12 || k == 13))
+                        continue;
+
+
+                    prio[st.fil - i - 1 + j][st.col + i]++;
+                    k++;
+                }
+            }      
+        break;
+        case sureste:
+        for (int i = 1; i < 4; i++)
+        {
+          for (int j = 1; j < 2*i+2; j++)
+          {
+            if (faulty && (k == 6 || k == 11 || k == 12 || k == 13))
+                continue;
+
+            if (j < i + 1)
+                prio[st.fil + j - 1][st.col + i]++;
+            else
+                prio[st.fil + i][st.col + i + i + 1 - j]++;
+
+            k++;
+          }
+        }    
+        break;
+        case sur:
+            for (int i = 1; i < 4; i++)
+            {
+                for (int j = 1; j < 2*i+2; j++)
+                {
+                    if (faulty && (k == 6 || k == 11 || k == 12 || k == 13))
+                        continue;
+                    
+                    prio[st.fil + i][st.col + i + 1 - j]++;
+                    k++;
+                }
+            }
+        break;
+        case suroeste:
+            for (int i = 1; i < 4; i++)
+            {
+              for (int j = 1; j < 2*i+2; j++)
+              {
+                if (faulty && (k == 6 || k == 11 || k == 12 || k == 13))
+                    continue;
+
+                if (j < i + 1)
+                    prio[st.fil + i][st.col - j + 1]++;
+
+                else
+                    prio[st.fil + i + i + 1 - j][st.col - i]++;
+
+                k++;
+              }
+            }    
+        break;
+        case oeste:
+            for (int i = 1; i < 4; i++)
+            {
+                for (int j = 1; j < 2*i+2; j++)
+                {
+                    if (faulty && (k == 6 || k == 11 || k == 12 || k == 13))
+                        continue;
+
+                    prio[st.fil + i + 1 - j][st.col - i]++;
+                    k++;
+                }
+            }
+        break;
+        case noroeste:
+        for (int i = 1; i < 4; i++)
+        {
+          for (int j = 1; j < 2*i+2; j++)
+          {
+            if (faulty && (k == 6 || k == 11 || k == 12 || k == 13))
+                continue;
+
+            if (j < i + 1)
+                prio[st.fil - j + 1][st.col - i]++;
+            else
+                prio[st.fil - i][st.col - i - i - 1 + j]++;
+            k++;
+          }
+        }  
+        break;
+    }
+}
+
 void ComportamientoJugador::translateMap(const Sensores & sensores, const State & st, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map)
 {
     int row = abs(st.fil - sensores.posF);
@@ -1073,6 +1042,18 @@ void ComportamientoJugador::printSensors(const Sensores & sensores)
     cout << "\nBikini: " << bikini;
     cout << "  Zapatillas: " << zapatillas;
     cout << "  Objetivo: " << objective.fil << " " << objective.col << endl << endl;
+
+    if (bien_situado)
+    {
+        for (int i = 0; i < priority.size(); i++)
+        {
+            for (int j = 0; j < priority[i].size(); j++)
+            {
+                cout << priority[i][j] << "  ";
+            }
+            cout << endl;
+        }
+    }
 }
 
 void ComportamientoJugador::resetState()
