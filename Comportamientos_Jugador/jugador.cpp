@@ -7,7 +7,7 @@ Action ComportamientoJugador::think(Sensores sensores)
 {
 	Action action = actIDLE;
 
-	printSensors(sensores);
+	// printSensors(sensores);
 
     Movement move;
 
@@ -169,25 +169,7 @@ Action ComportamientoJugador::think(Sensores sensores)
 
 Action ComportamientoJugador::randomlyMove(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
 {
-    int walk = 2, run = 6;
-    bool canwalk = accesibleSquare(terreno, agentes, walk);
-    vector<Action> selection;
-    default_random_engine generator;
-    uniform_real_distribution<float> distribution(0.0,1.0);
-
-    for (int i = 0; i < 10; i++)
-    {
-        float prob = distribution(generator);
-        if (prob < FORWARD_PROB)
-            selection.push_back(actWALK);
-        else if (prob < TURNL_PROB + TURNSR_PROB)
-            selection.push_back(actTURN_SR);
-        else if (prob < TURNL_PROB + TURNSR_PROB + FORWARD_PROB)
-            selection.push_back(actTURN_L);
-        else
-            selection.push_back(actTURN_SR);
-    }
-    return selection[rand() % selection.size()];
+    return actIDLE;
 }
 
 bool ComportamientoJugador::detectBikini(const vector<unsigned char> & terreno)
@@ -359,7 +341,7 @@ Action ComportamientoJugador::wallProtocol(const vector<unsigned char> & terreno
                 if (accesibleSquare(terreno, agentes, 2))
                 {
                     protocol.emplace_back(actTURN_L);
-                    protocol.emplace_back(actWALK);
+                    // protocol.emplace_back(actWALK);
                     return actWALK;
                 }
                 return actTURN_L;
@@ -455,20 +437,30 @@ Action ComportamientoJugador::randomlyRotate()
     return (rand() % 2 == 0) ? actTURN_SR : actTURN_L;
 }
 
-int ComportamientoJugador::setPriority(const unsigned char & sq)
+int ComportamientoJugador::setPriority(const unsigned char & sq, int i, int j)
 {
-    switch (sq)
+    if (goto_objective)
     {
-        case 'A': return bikini ? 25 : 50; break;
-        case 'B': return zapatillas ? 35 : 70; break;
-        case 'P': return 500; break;
-        case 'M': return 500; break;
-        case 'T': return 20; break;
-        case 'S': return 5; break;
-        case 'G': return 5; break;
-        case 'K': return 5; break;
-        case 'D': return 5; break;
-        case 'X': return 5; break;
+        if (sq == 'P' || sq == 'M')
+            return 500;
+        else
+            return measureDistance(objective, {i, j});
+    }
+    else
+    {
+        switch (sq)
+        {
+            case 'A': return bikini ? 5 : 50; break;
+            case 'B': return zapatillas ? 5 : 70; break;
+            case 'P': return 500; break;
+            case 'M': return 500; break;
+            case 'T': return 20; break;
+            case 'S': return 5; break;
+            case 'G': return 5; break;
+            case 'K': return 5; break;
+            case 'D': return 5; break;
+            case 'X': return 5; break;
+        }
     }
 }
 
@@ -557,6 +549,16 @@ bool ComportamientoJugador::accesibleSquare(const vector<unsigned char> & terren
     return (terreno[index] != 'P' && terreno[index] != 'M' && agentes[index] == '_');
 }
 
+bool ComportamientoJugador::convenientSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index)
+{
+    if (terreno[index] == 'A' && !bikini)
+        return false;
+    else if (terreno[index] == 'B' && !zapatillas)
+        return false;
+    else
+        return true;
+}
+
 Movement ComportamientoJugador::setMovement(const Orientacion & brujula, const Vision & view)
 {
     Movement move;
@@ -609,7 +611,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
 {
     int k = 0;
     map[st.fil][st.col] = terreno[k];
-    prio[st.fil][st.col] = setPriority(terreno[k]);
+    prio[st.fil][st.col] = setPriority(terreno[k], st.fil, st.col);
     k++;
     switch (st.brujula)
     {
@@ -627,7 +629,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                     if (map[st.fil - i][st.col - i - 1 + j] == '?')
                     {
                         map[st.fil - i][st.col - i - 1 + j] = terreno[k];
-                        prio[st.fil - i][st.col - i - 1 + j] = setPriority(terreno[k]);
+                        prio[st.fil - i][st.col - i - 1 + j] = setPriority(terreno[k], st.fil - i, st.col - i - 1 + j);
                     }
                     k++;
                 }
@@ -649,7 +651,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                         if (map[st.fil - i][st.col + j - 1] == '?')
                         {
                             map[st.fil - i][st.col + j - 1] = terreno[k];
-                            prio[st.fil - i][st.col + j - 1] = setPriority(terreno[k]);
+                            prio[st.fil - i][st.col + j - 1] = setPriority(terreno[k], st.fil - i, st.col + j - 1);
                         }
                         k++;
                     }
@@ -658,7 +660,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                         if (map[st.fil - i - i - 1 + j][st.col + i] == '?')
                         {
                             map[st.fil - i - i - 1 + j][st.col + i] = terreno[k];
-                            prio[st.fil - i - i - 1 + j][st.col + i] = setPriority(terreno[k]);
+                            prio[st.fil - i - i - 1 + j][st.col + i] = setPriority(terreno[k], st.fil - i - i - 1 + j, st.col + i);
                         }
                         k++;
                     }  
@@ -679,7 +681,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                     if (map[st.fil - i - 1 + j][st.col + i] == '?')
                     {
                         map[st.fil - i - 1 + j][st.col + i] = terreno[k];
-                        prio[st.fil - i - 1 + j][st.col + i] = setPriority(terreno[k]);
+                        prio[st.fil - i - 1 + j][st.col + i] = setPriority(terreno[k], st.fil - i - 1 + j, st.col + i);
                     }
                     k++;
                 }
@@ -701,7 +703,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                 if (map[st.fil + j - 1][st.col + i] == '?')
                 {
                     map[st.fil + j - 1][st.col + i] = terreno[k];
-                    prio[st.fil + j - 1][st.col + i] = setPriority(terreno[k]);
+                    prio[st.fil + j - 1][st.col + i] = setPriority(terreno[k], st.fil + j - 1, st.col + i);
                 }
                 k++;
             }
@@ -710,7 +712,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                 if (map[st.fil + i][st.col + i + i + 1 - j] == '?')
                 {
                     map[st.fil + i][st.col + i + i + 1 - j] = terreno[k];
-                    prio[st.fil + i][st.col + i + i + 1 - j] = setPriority(terreno[k]);
+                    prio[st.fil + i][st.col + i + i + 1 - j] = setPriority(terreno[k], st.fil + i, st.col + i + i + 1 - j);
                 }
                 k++;
             }
@@ -731,7 +733,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                     if (map[st.fil + i][st.col + i + 1 - j] == '?')
                     {
                         map[st.fil + i][st.col + i + 1 - j] = terreno[k];
-                        prio[st.fil + i][st.col + i + 1 - j] = setPriority(terreno[k]);
+                        prio[st.fil + i][st.col + i + 1 - j] = setPriority(terreno[k], st.fil + i, st.col + i + 1 - j);
                     }
                     k++;
                 }
@@ -753,7 +755,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                     if (map[st.fil + i][st.col - j + 1] == '?')
                     {
                         map[st.fil + i][st.col - j + 1] = terreno[k];
-                        prio[st.fil + i][st.col - j + 1] = setPriority(terreno[k]);
+                        prio[st.fil + i][st.col - j + 1] = setPriority(terreno[k], st.fil + i, st.col - j + 1);
                     }
                     k++;
                 }
@@ -762,7 +764,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                     if (map[st.fil + i + i + 1 - j][st.col - i] == '?')
                     {
                         map[st.fil + i + i + 1 - j][st.col - i] = terreno[k];
-                        prio[st.fil + i + i + 1 - j][st.col - i] = setPriority(terreno[k]);
+                        prio[st.fil + i + i + 1 - j][st.col - i] = setPriority(terreno[k], st.fil + i + i + 1 - j, st.col - i);
                     }
                     k++;
                 }
@@ -783,7 +785,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                     if (map[st.fil + i + 1 - j][st.col - i] == '?')
                     {
                         map[st.fil + i + 1 - j][st.col - i] = terreno[k];
-                        prio[st.fil + i + 1 - j][st.col - i] = setPriority(terreno[k]);
+                        prio[st.fil + i + 1 - j][st.col - i] = setPriority(terreno[k], st.fil + i + 1 - j, st.col - i);
                     }
                     k++;
                 }
@@ -805,7 +807,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                 if (map[st.fil - j + 1][st.col - i] == '?')
                 {
                     map[st.fil - j + 1][st.col - i] = terreno[k];
-                    prio[st.fil - j + 1][st.col - i] = setPriority(terreno[k]);
+                    prio[st.fil - j + 1][st.col - i] = setPriority(terreno[k], st.fil - j + 1, st.col - i);
                 }
                 k++;
             }
@@ -814,7 +816,7 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
                 if (map[st.fil - i][st.col - i - i - 1 + j] == '?')
                 {
                     map[st.fil - i][st.col - i - i - 1 + j] = terreno[k];
-                    prio[st.fil - i][st.col - i - i - 1 + j] = setPriority(terreno[k]);
+                    prio[st.fil - i][st.col - i - i - 1 + j] = setPriority(terreno[k], st.fil - i, st.col - i - i - 1 + j);
                 }
                 k++;
             }

@@ -7,9 +7,7 @@
 #include <random>
 
 #define BATTERY_THRESH 2500
-#define TURNSR_PROB 0.15
-#define TURNL_PROB 0.10
-#define FORWARD_PROB 0.65
+#define HEALTH_THRESH 1000
 
 using namespace std;
 
@@ -56,6 +54,7 @@ class ComportamientoJugador : public Comportamiento
         bikini = false;
         zapatillas = false;
         need_reload = false;
+        goto_objective = false;
         wall_protocol = false;
         faulty = false;
         cont_actWALK = 0;
@@ -82,12 +81,13 @@ class ComportamientoJugador : public Comportamiento
     Action selectMovement(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, vector<vector<unsigned int>> & prio);
     bool canMoveDiagonally(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, vector<vector<unsigned int>> & prio, Vision vision, unsigned int & min);
     bool accesibleSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index);
+    bool convenientSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index);
     void translateMap(const Sensores & sensores, const State & st, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map);
     void rotateMap(const Sensores & sensores, const State & st, vector<vector<unsigned char>> & map);
     Square searchUnexplored(const vector<vector<unsigned char>> & map, char sq);
     int measureDistance(const Square & sq1, const Square & sq2);
     int relativePosition(const Square sq1, const Square & sq2);
-    int setPriority(const unsigned char & sq);
+    int setPriority(const unsigned char & sq, int i, int j);
     void modifyPriority(const vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio);
     void setPrioritySearch(const vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio, const Square & objective);
     Action wallProtocol(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
