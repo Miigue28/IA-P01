@@ -1,3 +1,10 @@
+/**
+ * @file jugador.hpp
+ * @brief Especificación de la clase ComportamientoJugador
+ * @author Miguel Ángel Moreno Castro
+ * @date April 7th, 2024
+*/
+
 #ifndef COMPORTAMIENTOJUGADOR_H
 #define COMPORTAMIENTOJUGADOR_H
 
@@ -77,28 +84,33 @@ class ComportamientoJugador : public Comportamiento
     void printSensors(const Sensores & sensores);
     void printMap(const vector<unsigned char> & terreno, const State & st, vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio, bool faulty);
     void printPriorities(const vector<unsigned char> & terreno, const State & st, vector<vector<unsigned int>> & prio, bool faulty);
+
     bool detectBikini(const vector<unsigned char> & terreno);
     bool detectZapatillas(const vector<unsigned char> & terreno);
     bool detectReload(const vector<unsigned char> & terreno);
     bool detectPositioning(const vector<unsigned char> & terreno);
     bool detectCicle(const vector<vector<unsigned int>> & prio);
+
     Movement setMovement(const Orientacion & brujula, const Vision & view);
     Action selectMovement(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, const vector<vector<unsigned int>> & prio);
     bool canMoveDiagonally(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, const vector<vector<unsigned int>> & prio, Vision vision, unsigned int & min);
     bool accesibleSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index);
     bool convenientSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index);
+
     void translateMap(const Sensores & sensores, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map);
     void rotateMap(const Sensores & sensores, vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio);
+
     Square searchSquare(const vector<vector<unsigned char>> & map, char sq);
     int measureDistance(const Square & sq1, const Square & sq2);
     int setDistance(const unsigned char & sq, int i, int j);
     int relativePosition(const Square sq1, const Square & sq2);
     int setPriority(const unsigned char & sq);
     void modifyPriority(const vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio);
-    void setPrioritySearch(const vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio, const Square & objective);
     Action wallProtocol(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
+
     Action goToObjective(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
     Action goToSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, unsigned char square);
+
     Action randomlyRotate();
     Action randomlyMove(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes);
 

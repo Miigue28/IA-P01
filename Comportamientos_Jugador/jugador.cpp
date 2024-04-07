@@ -1,4 +1,12 @@
+/**
+ * @file jugador.cpp
+ * @brief Implementación de la clase ComportamientoJugador
+ * @author Miguel Ángel Moreno Castro
+ * @date April 7th, 2024
+*/
+
 #include "../Comportamientos_Jugador/jugador.hpp"
+
 #include <iostream>
 
 using namespace std;
@@ -7,7 +15,7 @@ Action ComportamientoJugador::think(Sensores sensores)
 {
 	Action action = actIDLE;
 
-	//printSensors(sensores);
+	// printSensors(sensores);
 
     Movement move;
 
@@ -81,7 +89,6 @@ Action ComportamientoJugador::think(Sensores sensores)
         break;
         case 'X':
             need_reload = false;
-            reload = true;
             // Nos esperamos hasta que recarguemos suficientemente la batería
             if (!desperate && sensores.vida < HEALTH_MODERATE_THRESH && sensores.bateria < 3500)
             {
@@ -95,11 +102,13 @@ Action ComportamientoJugador::think(Sensores sensores)
             }
         break;
         case 'K':
-            if (bien_situado && !bikini) modifyPriority(mapaResultado, priority); else modifyPriority(aux_map, aux_prio);
+            // Si es la primera vez que pisamos esta casilla modificamos la prioridad de las casillas de Agua para poder pisarlas
+            if (!bikini) modifyPriority(bien_situado ? mapaResultado : aux_map, bien_situado ? priority : aux_prio);
             bikini = true;
         break;
         case 'D':
-            if (bien_situado && !zapatillas) modifyPriority(mapaResultado, priority); else modifyPriority(aux_map, aux_prio);
+            // Si es la primera vez que pisamos esta casilla modificamos la prioridad de las casillas de Bosque para poder pisarlas
+            if (!zapatillas) modifyPriority(bien_situado ? mapaResultado : aux_map, bien_situado ? priority : aux_prio);
             zapatillas = true;
         break;
     }
@@ -117,6 +126,7 @@ Action ComportamientoJugador::think(Sensores sensores)
         if (reload && !goto_objective)
         {
             objective = searchSquare(bien_situado ? mapaResultado : aux_map, 'X');
+            // Si está relativamente cerca de nuestra posición vamos a por ella
             if (measureDistance((Square) current_state, objective) < 15)
             {
                 goto_objective = true;
@@ -161,6 +171,7 @@ Action ComportamientoJugador::think(Sensores sensores)
     {
         action = goToSquare(sensores.terreno, sensores.agentes, 'G');
     }
+    // Evitamos pararnos en una casilla de recarga si tenemos casi todo el tanque lleno
     else if (!desperate && detectReload(sensores.terreno) && sensores.bateria < 4000)
     {
         action = goToSquare(sensores.terreno, sensores.agentes, 'X');
@@ -186,35 +197,32 @@ Action ComportamientoJugador::think(Sensores sensores)
     last_action = action;
 	return action;
 }
-
+/**
+ * @brief Función que nos permite moverlos aleatoriamente, 
+ * nos permite un 90% de las veces avanzar y un 10% girar
+ * @param terreno Sensor de terreno
+ * @param agentes Sensor de agentes
+ * @return Acción a ejecutar
+ */
 Action ComportamientoJugador::randomlyMove(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
 {
-    cont_random++;
     Action action = actIDLE;
     int prob;
 
     if (accesibleSquare(terreno, agentes, 2))
-    {
         prob = rand()%1000;
-    }
     else
-    {
         prob = rand()%20;
-    }
 
     if (prob >= 0 && prob <= 14)
-    {
         action = actTURN_SR;
-    }
     else if (prob >= 15 && prob <= 19)
-    {
         action = actTURN_L;
-    }
     else
-    {
         action = actWALK;
-    }
 
+    // Establecemos una cota máxima de uso continuo de este protocolo
+    cont_random++;
     if (cont_random > 25)
     {
         cont_random = 0;
@@ -228,6 +236,11 @@ Action ComportamientoJugador::randomlyRotate()
     return (rand() % 2 == 0) ? actTURN_SR : actTURN_L;
 }
 
+/**
+ * @brief Método que detecta si nos encontramos cerca de un bikini
+ * @param terreno Sensores de terreno
+ * @return True si lo estamos, False en caso contrario
+ */
 bool ComportamientoJugador::detectBikini(const vector<unsigned char> & terreno)
 {
     for (auto t : terreno)
@@ -238,6 +251,11 @@ bool ComportamientoJugador::detectBikini(const vector<unsigned char> & terreno)
     return false;
 }
 
+/**
+ * @brief Método que detecta si nos encontramos cerca de unas zapatillas
+ * @param terreno Sensores de terreno
+ * @return True si lo estamos, False en caso contrario
+ */
 bool ComportamientoJugador::detectZapatillas(const vector<unsigned char> & terreno)
 {
     for (auto t : terreno)
@@ -248,6 +266,11 @@ bool ComportamientoJugador::detectZapatillas(const vector<unsigned char> & terre
     return false;
 }
 
+/**
+ * @brief Método que detecta si nos encontramos cerca de un posicionamineto
+ * @param terreno Sensores de terreno
+ * @return True si lo estamos, False en caso contrario
+ */
 bool ComportamientoJugador::detectPositioning(const vector<unsigned char> & terreno)
 {
     for (auto t : terreno)
@@ -258,12 +281,18 @@ bool ComportamientoJugador::detectPositioning(const vector<unsigned char> & terr
     return false;
 }
 
+/**
+ * @brief Método que detecta si nos encontramos cerca de una recarga
+ * @param terreno Sensores de terreno
+ * @return True si lo estamos, False en caso contrario
+ */
 bool ComportamientoJugador::detectReload(const vector<unsigned char> & terreno)
 {
     for (auto t : terreno)
     {
         if (t == 'X')
         {
+            // Notificamos que hemos visto al menos una casilla de recarga
             reload = true;
             return true;
         }
@@ -271,6 +300,13 @@ bool ComportamientoJugador::detectReload(const vector<unsigned char> & terreno)
     return false;
 }
 
+/**
+ * @brief Método que detecta si nos encontramos en un ciclo
+ * Realiza una media ponderada de las visitas a las casillas de
+ * nuestro entorno
+ * @param prio Mapa de prioridades 
+ * @return True si lo estamos, False en caso contrario
+ */
 bool ComportamientoJugador::detectCicle(const vector<vector<unsigned int>> & prio)
 {
     int row = current_state.fil, column = current_state.col;
@@ -281,6 +317,7 @@ bool ComportamientoJugador::detectCicle(const vector<vector<unsigned int>> & pri
     int count = 1;
     for (int k = 1; k < 3; k++)
     {
+        // Calculamos las cotas de filas y columnas para no salirnos de la matriz
         row_lowerbound = (3 <= row - k ? row - k : row_lowerbound);
         column_lowerbound = (3 <= column - k ? column - k : column_lowerbound);
         row_upperbound = (row + k < size - 3 ? row + k : row_upperbound);
@@ -288,6 +325,7 @@ bool ComportamientoJugador::detectCicle(const vector<vector<unsigned int>> & pri
         
         for (int i = column_lowerbound; i <= column_upperbound; i++)
         {
+            // Evitamos tener en cuenta los muros y precipicios
             if (prio[row_lowerbound][i] < 500)
             {
                 mean += prio[row_lowerbound][i];
@@ -314,19 +352,23 @@ bool ComportamientoJugador::detectCicle(const vector<vector<unsigned int>> & pri
         }
     }
 
+    // Ajusta la media de prioridades a si estamos en posesión de objetos especiales
     if (bikini && zapatillas)
-    {
         return mean/count > 35;
-    }
     else
-    {
         return mean/count > 75;
-    }
 }
 
+/**
+ * @brief Método que nos permite ir a la casilla especial que anteriormente
+ * hemos visto por nuestros sensores
+ * @param terreno Sensores de terreno
+ * @param agentes Sensores de agentes
+ * @param square Casilla especial
+ * @return Acción requerida para acercarnos a la casilla que buscamos
+ */
 Action ComportamientoJugador::goToSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, unsigned char square)
 {
-    // TODO: HACER MÁS EFICIENTE ESTÁ BUSQUEDA
     int index = -1;
     for (int i = 0; i < terreno.size(); i++)
     {
@@ -369,13 +411,22 @@ Action ComportamientoJugador::goToSquare(const vector<unsigned char> & terreno, 
     }
 }
 
+/**
+ * @brief Método que nos permite guiarnos a la casilla establecida
+ * como objetivo
+ * @param terreno Sensores de terreno 
+ * @param agentes Sensores de agentes
+ * @return Acción requerida para acercarnos a la casilla objetivo
+ */
 Action ComportamientoJugador::goToObjective(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
 {
     int row = current_state.fil;
     int column = current_state.col;
+    // Calculamos los desplazamientos
     Movement move_forward = setMovement(current_state.brujula, straight);
     Movement move_right = setMovement(current_state.brujula, rightdiagonal);
     Movement move_left = setMovement(current_state.brujula, leftdiagonal);
+
     Action action = actTURN_L;
 
     // Calculamos las distancias al objetivo
@@ -402,6 +453,13 @@ Action ComportamientoJugador::goToObjective(const vector<unsigned char> & terren
     return action;
 }
 
+/**
+ * @brief Método de gestión de muros, nos permite salir de cavidades
+ * rodeadas enteramente por muros
+ * @param terreno Sensores de terreno
+ * @param agentes Sensores de agentes
+ * @return Acción requerida para conseguir nuestro cometido
+ */
 Action ComportamientoJugador::wallProtocol(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes)
 {
     if (!accesibleSquare(terreno, agentes, 1) && !accesibleSquare(terreno, agentes, 2) && !accesibleSquare(terreno, agentes, 3))
@@ -443,11 +501,26 @@ Action ComportamientoJugador::wallProtocol(const vector<unsigned char> & terreno
     }
 }
 
-int ComportamientoJugador::measureDistance(const Square & st1, const Square & st2)
+/**
+ * @brief Método que nos permite medir la distancia entre dos casillas
+ * haciendo uso de la distancia de Chebyshov
+ * @param sq1 Casilla a medir distancia
+ * @param sq2 Casilla a medir distancia
+ * @return Distancia entre ambas casillas
+ */
+int ComportamientoJugador::measureDistance(const Square & sq1, const Square & sq2)
 {
-    return max(abs(st1.fil - st2.fil),  abs(st1.col - st2.col));
+    return max(abs(sq1.fil - sq2.fil),  abs(sq1.col - sq2.col));
 }
 
+/**
+ * @brief Método que nos permite asignarle a una casilla 
+ * su correspondiente distancia al objetivo
+ * @param sq Tipo de casilla
+ * @param i Fila
+ * @param j Columna
+ * @return Distancia de la casilla al objetivo
+ */
 int ComportamientoJugador::setDistance(const unsigned char & sq, int i, int j)
 {
     if (goto_objective)
@@ -459,23 +532,13 @@ int ComportamientoJugador::setDistance(const unsigned char & sq, int i, int j)
     }
 }
 
-void ComportamientoJugador::setPrioritySearch(const vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & dist, const Square & objective)
-{
-    for (int i = 0; i < map.size(); i++)
-    {
-        for (int j = 0; j < map[i].size(); j++)
-        {
-            if (map[i][j] != '?')
-            {
-                if (map[i][j] == 'P' || map[i][j] == 'M')
-                    dist[i][j] = 500;
-                else
-                    dist[i][j] = measureDistance(objective, {i, j});
-            }
-        }
-    }       
-}
-
+/**
+ * @brief Método que nos permite asignarle prioridades a las
+ * casillas para la posterior toma de decisiones al determinar
+ * un movimiento
+ * @param sq Tipo de casilla
+ * @return Prioridad asignada al tipo de casilla
+ */
 int ComportamientoJugador::setPriority(const unsigned char & sq)
 {
     switch (sq)
@@ -493,6 +556,13 @@ int ComportamientoJugador::setPriority(const unsigned char & sq)
     }
 }
 
+/**
+ * @brief Método que nos permite modificar la prioridad de aquellas
+ * casillas que teniendo el correspondiente objeto especial no nos
+ * resulta tan costoso pisarlas
+ * @param map Mapa de casillas
+ * @param prio Mapa de prioridades
+ */
 void ComportamientoJugador::modifyPriority(const vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio)
 {
     for (int i = 0; i < map.size(); i++)
@@ -508,16 +578,27 @@ void ComportamientoJugador::modifyPriority(const vector<vector<unsigned char>> &
     }
 }
 
+/**
+ * @brief Método que nos permite realizar la toma de decisiones sobre
+ * el movimiento más idóneo que hacer en cada momento
+ * @param terreno Sensor de terreno
+ * @param agentes Sensor de agentes
+ * @param prio Mapa de prioridades
+ * @return Acción requerida para nuestro cometido
+ */
 Action ComportamientoJugador::selectMovement(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, const vector<vector<unsigned int>> & prio)
 {
     int walk = 2, run = 6;
     unsigned int min = 500, min_leftdiag = 500, min_rightdiag = 500;
     Movement move = setMovement(current_state.brujula, straight);
     Action action = actTURN_L;
+
+    // Si podemos avanzar lo priorizamos antes que girar
     if (accesibleSquare(terreno, agentes, walk))
     {
         min = prio[current_state.fil + move.fil][current_state.col + move.col];
         action = actWALK;
+        // Si podemos correr y dicha casilla es más conveniente que la de avanzar
         if (!faulty && accesibleSquare(terreno, agentes, run) && convenientSquare(terreno, agentes, run))
         {
             unsigned int run_prio = prio[current_state.fil + 2*move.fil][current_state.col + 2*move.col];
@@ -528,11 +609,13 @@ Action ComportamientoJugador::selectMovement(const vector<unsigned char> & terre
             }
         }
     }
+    // Si nos podemos mover en la diagonal derecha y nos mejora la decisión hasta el momento
     if (canMoveDiagonally(terreno, agentes, bien_situado ? priority : aux_prio, rightdiagonal, min_rightdiag) && min_rightdiag < min)
     {
         min = min_rightdiag;
         action = actTURN_SR;
     }
+    // Si nos podemos mover en la diagonal izquierda y nos mejora la decisión el momento
     if (canMoveDiagonally(terreno, agentes, bien_situado ? priority : aux_prio, leftdiagonal, min_leftdiag) && min_leftdiag < min)
     {
         min = min_leftdiag;
@@ -541,6 +624,16 @@ Action ComportamientoJugador::selectMovement(const vector<unsigned char> & terre
     return action;
 }
 
+/**
+ * @brief Método que determina el mínimo coste que nos supondría
+ * avanzar en función del giro realizado
+ * @param terreno Sensor de terreno
+ * @param agentes Sensor de agentes
+ * @param prio Mapa de prioridades
+ * @param vision Tipo de giro
+ * @param min Mínima prioridad de las casillas que tiene delante
+ * @return True si es viable girar, False en caso contrario
+ */
 bool ComportamientoJugador::canMoveDiagonally(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, const vector<vector<unsigned int>> & prio, Vision vision, unsigned int & min)
 {
     int walk, run;
@@ -554,7 +647,7 @@ bool ComportamientoJugador::canMoveDiagonally(const vector<unsigned char> & terr
     if (accesibleSquare(terreno, agentes, walk))
     {
         min = prio[current_state.fil + move.fil][current_state.col + move.col];
-        // Si la siguiente también es accesible
+        // Si la siguiente también es accesible y nos mejora la métrica la elegimos
         if (!faulty && accesibleSquare(terreno, agentes, run))
         {
             unsigned int run_prio = prio[current_state.fil + 2*move.fil][current_state.col + 2*move.col];
@@ -566,11 +659,27 @@ bool ComportamientoJugador::canMoveDiagonally(const vector<unsigned char> & terr
     return false;
 }
 
+/**
+ * @brief Método que nos determina si una determinada casilla de
+ * nuestros sensores es accesible
+ * @param terreno Sensor de terreno
+ * @param agentes Sensor de agentes
+ * @param index Índice de los sensores
+ * @return True si es accesible, False en caso contrario
+ */
 bool ComportamientoJugador::accesibleSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index)
 {
     return (terreno[index] != 'P' && terreno[index] != 'M' && agentes[index] == '_');
 }
 
+/**
+ * @brief Método que nos determina si una determinada casilla de
+ * nuestros sensores es conveniente pisarla
+ * @param terreno Sensor de terreno
+ * @param agentes Sensor de agentes
+ * @param index Índice de los sensores
+ * @return True si es conveniente, False en caso contrario
+ */
 bool ComportamientoJugador::convenientSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index)
 {
     if (terreno[index] == 'A' && !bikini)
@@ -581,6 +690,13 @@ bool ComportamientoJugador::convenientSquare(const vector<unsigned char> & terre
         return true;
 }
 
+/**
+ * @brief Método que nos determina el movimiento de avanzar en 
+ * función de hacia qué dirección queremos ir
+ * @param brujula Orientación
+ * @param view Dirección
+ * @return Tipo de movimiento
+ */
 Movement ComportamientoJugador::setMovement(const Orientacion & brujula, const Vision & view)
 {
     Movement move;
@@ -629,6 +745,12 @@ Movement ComportamientoJugador::setMovement(const Orientacion & brujula, const V
     return move;
 }
 
+/**
+ * @brief Método que nos localiza la casilla que buscamos más cercana
+ * @param map Mapa de casillas
+ * @param square Tipo de casilla
+ * @return Localización en el mapa de la casilla que buscamos
+ */
 Square ComportamientoJugador::searchSquare(const vector<vector<unsigned char>> & map, char square)
 {
     int row = current_state.fil;
@@ -707,6 +829,15 @@ Square ComportamientoJugador::searchSquare(const vector<vector<unsigned char>> &
     return out;
 }
 
+/**
+ * @brief Método que nos permite imprimir en los mapas lo que vemos
+ * por el sensor de terreno
+ * @param terreno Sensor de terreno
+ * @param st Posición actual
+ * @param map Mapa de casillas
+ * @param prio Mapa de prioridades
+ * @param faulty Determina si nuestro sensor está defectuoso
+ */
 void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, const State & st, vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio, bool faulty)
 {
     int k = 0;
@@ -929,6 +1060,14 @@ void ComportamientoJugador::printMap(const vector<unsigned char> & terreno, cons
     }
 }
 
+/**
+ * @brief Método que nos actualiza el mapa de prioridades en función
+ * de las veces que hemos pasado/visto las casillas de nuestro sensor
+ * @param terreno Sensor de terreno
+ * @param st Posición actual
+ * @param prio Mapa de prioridades
+ * @param faulty Determina si el sensor está defectuoso
+ */
 void ComportamientoJugador::printPriorities(const vector<unsigned char> & terreno, const State & st, vector<vector<unsigned int>> & prio, bool faulty)
 {
     int k = 1;
@@ -1059,8 +1198,16 @@ void ComportamientoJugador::printPriorities(const vector<unsigned char> & terren
     }
 }
 
+/**
+ * @brief Método que nos permite hacer una traslación del mapa auxiliar
+ * al mapa resultado
+ * @param sensores Sensores
+ * @param aux Mapa de casillas auxiliar
+ * @param map Mapa de casillas resultado
+ */
 void ComportamientoJugador::translateMap(const Sensores & sensores, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map)
 {
+    // Calculamos el desplazamiento
     int row = abs(current_state.fil - sensores.posF);
     int column = abs(current_state.col - sensores.posC);
     
@@ -1077,6 +1224,12 @@ void ComportamientoJugador::translateMap(const Sensores & sensores, const vector
     }
 }
 
+/**
+ * @brief Método que nos permite rotar los mapas
+ * @param sensores Sensores
+ * @param map Mapa de casillas
+ * @param prio Mapa de prioridades
+ */
 void ComportamientoJugador::rotateMap(const Sensores & sensores, vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio)
 {
     int size = map.size();
@@ -1107,6 +1260,10 @@ void ComportamientoJugador::rotateMap(const Sensores & sensores, vector<vector<u
     }
 }
 
+/**
+ * @brief Método que nos permite pintar en el mapa de casillas
+ * los precipicios iniciales
+ */
 void ComportamientoJugador::printCliffs()
 {
     int size = mapaResultado.size();
@@ -1122,6 +1279,11 @@ void ComportamientoJugador::printCliffs()
     }
 }
 
+/**
+ * @brief Método que nos muestra por pantalla información útil en
+ * la ejecución de nuestro agente
+ * @param sensores Sensores
+ */
 void ComportamientoJugador::printSensors(const Sensores & sensores)
 {
     // Muestra el valor de los sensores
@@ -1154,6 +1316,9 @@ void ComportamientoJugador::printSensors(const Sensores & sensores)
     cout << "  Objetivo: " << objective.fil << " " << objective.col << endl << endl;
 }
 
+/**
+ * @brief Método de reset del agente
+ */
 void ComportamientoJugador::resetState()
 {
     current_state.fil = 99;
