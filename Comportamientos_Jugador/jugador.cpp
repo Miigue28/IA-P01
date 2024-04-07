@@ -71,8 +71,8 @@ Action ComportamientoJugador::think(Sensores sensores)
         case 'G':
             if (!bien_situado)
             {
-                translateMap(sensores, current_state, aux_map, mapaResultado);
-                rotateMap(sensores, current_state, mapaResultado);
+                rotateMap(sensores, aux_map, aux_prio);
+                translateMap(sensores, aux_map, mapaResultado);
                 current_state.fil = sensores.posF;
                 current_state.col = sensores.posC;
                 current_state.brujula = sensores.sentido;
@@ -83,7 +83,12 @@ Action ComportamientoJugador::think(Sensores sensores)
             need_reload = false;
             reload = true;
             // Nos esperamos hasta que recarguemos suficientemente la batería
-            if (!desperate && sensores.bateria < 4500)
+            if (!desperate && sensores.vida < HEALTH_MODERATE_THRESH && sensores.bateria < 3500)
+            {
+                last_action = action;
+                return action;
+            }
+            else if (!desperate && sensores.bateria < 4500)
             {
                 last_action = action;
                 return action;
@@ -100,44 +105,30 @@ Action ComportamientoJugador::think(Sensores sensores)
     }
 
     // Si nos queda poco tiempo de vida evitamos pararnos a recargar
-    if (sensores.vida < HEALTH_THRESH)
+    if (sensores.vida < HEALTH_DESPERATE_THRESH)
     {
         desperate = true;
     }
 
     // Si estamos escasos de batería vamos a la casilla de recarga más cercana
-    // if (!desperate && sensores.bateria < BATTERY_THRESH)
-    // {
-    //     // Siempre que hayamos visto previamente una casilla de recarga
-    //     if (reload && !goto_objective)
-    //     {
-    //         objective = searchSquare(bien_situado ? mapaResultado : aux_map, 'X');
-    //         if (measureDistance((Square) current_state, objective) < 15)
-    //         {
-    //             goto_objective = true;
-    //             need_reload = true;
-    //         }
-    //     }
-    // }
+    if (!desperate && sensores.bateria < BATTERY_THRESH)
+    {
+        // Siempre que hayamos visto previamente una casilla de recarga
+        if (reload && !goto_objective)
+        {
+            objective = searchSquare(bien_situado ? mapaResultado : aux_map, 'X');
+            if (measureDistance((Square) current_state, objective) < 15)
+            {
+                goto_objective = true;
+                need_reload = true;
+            }
+        }
+    }
 
-    // Si llevamos mucho tiempo en la misma zona buscamos la casilla más cercana sin explorar
-    // si está relativamente cerca nuestra vamos a ella, si no nos movemos aleatoriamente
+    // Si llevamos mucho tiempo en la misma zona nos movemos aleatoriamente
     if (!random && detectCicle(bien_situado ? priority : aux_prio))
     {
         random = true;
-        //if (!goto_objective)
-        //{
-        //    objective = searchSquare(bien_situado ? mapaResultado : aux_map, '?');
-        //    if (measureDistance((Square) current_state, objective) < 25)
-        //    {
-        //        goto_objective = true;
-        //    }
-        //    else
-        //    {
-        //        random = true;
-        //    }
-        //    
-        //}
     }
 
     // Si nos chocamos contra un muro activamos el protocolo para gestionarlos
@@ -162,10 +153,6 @@ Action ComportamientoJugador::think(Sensores sensores)
     {
         action = randomlyMove(sensores.terreno, sensores.agentes);
     }
-    else if (goto_objective)
-    {
-        action = goToObjective(sensores.terreno, sensores.agentes);
-    }
     else if (wall_protocol)
     {
         action = wallProtocol(sensores.terreno, sensores.agentes);
@@ -186,6 +173,10 @@ Action ComportamientoJugador::think(Sensores sensores)
     {
         action = goToSquare(sensores.terreno, sensores.agentes, 'D'); 
     }
+    else if (goto_objective)
+    {
+        action = goToObjective(sensores.terreno, sensores.agentes);
+    }
     else
     {
         action = selectMovement(sensores.terreno, sensores.agentes, bien_situado ? priority : aux_prio);
@@ -200,16 +191,30 @@ Action ComportamientoJugador::randomlyMove(const vector<unsigned char> & terreno
 {
     cont_random++;
     Action action = actIDLE;
-    if (accesibleSquare(terreno, agentes, 2) && cont_actWALK < 15)
+    int prob;
+
+    if (accesibleSquare(terreno, agentes, 2))
     {
-        cont_actWALK++;
-        action = actWALK;
+        prob = rand()%1000;
     }
     else
     {
-        cont_actWALK = 0;
-        action = randomlyRotate();
+        prob = rand()%20;
     }
+
+    if (prob >= 0 && prob <= 14)
+    {
+        action = actTURN_SR;
+    }
+    else if (prob >= 15 && prob <= 19)
+    {
+        action = actTURN_L;
+    }
+    else
+    {
+        action = actWALK;
+    }
+
     if (cont_random > 25)
     {
         cont_random = 0;
@@ -485,7 +490,6 @@ int ComportamientoJugador::setPriority(const unsigned char & sq)
         case 'K': return 5; break;
         case 'D': return 5; break;
         case 'X': return 5; break;
-        //default: return 0; break;
     }
 }
 
@@ -634,7 +638,7 @@ Square ComportamientoJugador::searchSquare(const vector<vector<unsigned char>> &
     int row_upperbound = current_state.fil;
     int column_upperbound = current_state.col;
     int min = 500;
-    int n = mapaResultado.size();
+    int n = map.size();
     int distance;
     bool found = false;
 
@@ -1055,10 +1059,10 @@ void ComportamientoJugador::printPriorities(const vector<unsigned char> & terren
     }
 }
 
-void ComportamientoJugador::translateMap(const Sensores & sensores, const State & st, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map)
+void ComportamientoJugador::translateMap(const Sensores & sensores, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map)
 {
-    int row = abs(st.fil - sensores.posF);
-    int column = abs(st.col - sensores.posC);
+    int row = abs(current_state.fil - sensores.posF);
+    int column = abs(current_state.col - sensores.posC);
     
     for (int i = 0; i < map.size(); i++)
     {
@@ -1069,23 +1073,24 @@ void ComportamientoJugador::translateMap(const Sensores & sensores, const State 
                 map[i][j] = aux[row + i][column + j];
                 priority[i][j] = aux_prio[row + i][column + j];
             }
-                
         }
     }
 }
 
-void ComportamientoJugador::rotateMap(const Sensores & sensores, const State & st, vector<vector<unsigned char>> & map)
+void ComportamientoJugador::rotateMap(const Sensores & sensores, vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio)
 {
     int size = map.size();
-    int rotations = sensores.sentido - current_state.brujula;
+    int rotations = (sensores.sentido/2 - current_state.brujula/2 + 4)%4;
+    int tmp;
 
     for (int k = 0; k < rotations; k++){
         // Transpose matrix
-        for (int i = 0; i < size-1; i++)
+        for (int i = 0; i < size; i++)
         {
             for (int j = i+1; j < size; j++)
             {
                 swap(map[i][j], map[j][i]);
+                swap(prio[i][j], prio[j][i]);
             }
         }
         // Vertical mirror
@@ -1093,8 +1098,12 @@ void ComportamientoJugador::rotateMap(const Sensores & sensores, const State & s
             for (int j = 0; j < size/2; j++)
             {
                 swap(map[i][j], map[i][size-1-j]);
+                swap(prio[i][j], prio[i][size-1-j]);
             }
-        } 
+        }
+        tmp = current_state.fil;
+        current_state.fil = current_state.col;
+        current_state.col = size-1-tmp;
     }
 }
 
@@ -1156,8 +1165,11 @@ void ComportamientoJugador::resetState()
     zapatillas = false;
     reload = false;
     need_reload = false;
+    goto_objective = false;
     wall_protocol = false;
-    cont_actWALK = 0;
+    faulty = false;
+    desperate = false;
+    random = false;
     aux_map.clear();
     aux_prio.clear();
     aux_map.resize(200, vector<unsigned char>(200, '?'));

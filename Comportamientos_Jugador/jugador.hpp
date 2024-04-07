@@ -7,7 +7,8 @@
 #include <random>
 
 #define BATTERY_THRESH 2500
-#define HEALTH_THRESH 1500
+#define HEALTH_MODERATE_THRESH 2000
+#define HEALTH_DESPERATE_THRESH 1500
 #define RELOAD_THRESH 4500
 
 using namespace std;
@@ -62,7 +63,6 @@ class ComportamientoJugador : public Comportamiento
         faulty = false;
         desperate = false;
         random = false;
-        cont_actWALK = 0;
         cont_random = 0;
         aux_map.resize(200, vector<unsigned char>(200, '?'));
         aux_prio.resize(200, vector<unsigned int>(200, 0));
@@ -87,8 +87,8 @@ class ComportamientoJugador : public Comportamiento
     bool canMoveDiagonally(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, const vector<vector<unsigned int>> & prio, Vision vision, unsigned int & min);
     bool accesibleSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index);
     bool convenientSquare(const vector<unsigned char> & terreno, const vector<unsigned char> & agentes, int index);
-    void translateMap(const Sensores & sensores, const State & st, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map);
-    void rotateMap(const Sensores & sensores, const State & st, vector<vector<unsigned char>> & map);
+    void translateMap(const Sensores & sensores, const vector<vector<unsigned char>> & aux, vector<vector<unsigned char>> & map);
+    void rotateMap(const Sensores & sensores, vector<vector<unsigned char>> & map, vector<vector<unsigned int>> & prio);
     Square searchSquare(const vector<vector<unsigned char>> & map, char sq);
     int measureDistance(const Square & sq1, const Square & sq2);
     int setDistance(const unsigned char & sq, int i, int j);
@@ -118,8 +118,6 @@ class ComportamientoJugador : public Comportamiento
     bool desperate;
     bool random;
     Vision had_walls;
-    int discovered;
-    int cont_actWALK;
     int cont_random;
     vector<vector<unsigned char>> aux_map;
     vector<vector<unsigned int>> aux_prio;
